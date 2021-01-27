@@ -1,0 +1,236 @@
+---
+title: "LinkedIn Data Dashboard"
+output: 
+  flexdashboard::flex_dashboard:
+   orientation: rows
+   vertical_layout: fill
+   #runtime: shiny
+   source_code: embed
+---
+
+```{r setup, include=FALSE}
+#Sys.getlocale("LC_CTYPE")
+# Import all needed libraries or install if not found on computer
+if(!require(rmarkdown)) install.packages("rmarkdown")
+if(!require(shiny)) install.packages("shiny")
+
+if(!require(flexdashboard)) install.packages("flexdashboard")
+if(!require(ggplot2)) install.packages("ggplot2")
+if(!require(readxl)) install.packages("readxl")
+if(!require(tidyverse)) install.packages("tidyverse")
+if(!require(plotly)) install.packages("plotly")
+if(!require(ggmap)) install.packages("ggmap")
+if(!require(data.table)) install.packages("data.table")
+if(!require(readr)) install.packages("readr")
+if(!require(lubridate)) install.packages("lubridate")
+if(!require(zoo)) install.packages("zoo")
+if(!require(ggplot2)) install.packages("ggplot2")
+if(!require(hrbrthemes)) install.packages("hrbrthemes")
+if(!require(forcats)) install.packages("forcats")
+#if(!require(forcats)) install.packages("forcats")
+
+### --- Read Data from LinkedIn Files --- ###
+# Profile
+Profile = read.csv("./Input Data/Profile.csv")
+First_Name = Profile$First.Name
+Last_Name = Profile$Last.Name
+Position = Profile$Headline
+
+# Registration
+Registration = read.csv("./Input Data/Registration.csv")
+Registration$Registered.At = mdy(substr(Registration$Registered.At,1,8))
+
+# Connections
+Connections = read.csv("./Input Data/Connections.csv", skip = 3)
+Connections = Connections %>%
+  mutate(`Connected.On` = dmy(Connected.On)
+         , `Month_Connected` = floor_date(`Connected.On`, unit = "months")
+         )
+
+# Reactions
+Reactions = read.csv("./Input Data/Reactions.csv")
+Reactions$Date = as.yearmon(Reactions$Date)
+
+# Invitations
+Invitations = read.csv("./Input Data/Invitations.csv")
+
+# Positions
+Positions = read.csv("./Input Data/Positions.csv")
+Number_Of_Positions = nrow(Positions)
+Companies_Worked_For = n_distinct(Positions$Company.Name)
+
+Started_Work = dmy(paste0("01 ",Positions[Number_Of_Positions,5]))
+
+# Estimate Years of experience
+Years_Of_Experience = round(as.numeric((Sys.Date() - as.Date(Started_Work))/365),digits = 0)
+
+# Endorsements
+Endorsements = read_tsv("./Input Data/Endorsement Received Info.csv")
+Endorsements = Endorsements %>%
+  mutate(`Endorsement Date` = ymd(substr(`Endorsement Date`,1,10))
+         , `Endorsement_Month` = floor_date(`Endorsement Date`, unit = "months")
+         , `Endorsement_Year` = year(`Endorsement Date`)
+         )
+
+```
+
+
+Main Info {data-icon="fa-globe"}
+=============================
+Row {data-width=150}
+--------------------------------------
+### Profile
+```{r}
+# Current Working Position on LinkedIn
+valueBox(value = paste0(First_Name," ",Last_Name),icon = "far fa-address-card",caption = Position,color = "Green")
+```
+
+### Dashboard Generation Date
+```{r}
+# Date of Registration
+dashborad_date = as.Date(Sys.Date())
+valueBox(value = dashborad_date,icon = "fas fa-calendar-alt",caption = "Dashboard Generation Date",color = "#add8e6")
+```
+
+### Registration Date
+```{r}
+# Date of Registration
+registration = Registration$Registered.At
+valueBox(value = registration,icon = "fas fa-calendar-alt",caption = "LinkedIn Registration Date",color = "purple")
+```
+
+### Total LinkedIn Connections
+```{r}
+# Total Connections on LinkedIn
+connections_number = Connections %>% nrow()
+valueBox(value = connections_number,icon = "fa-user-plus",caption = "Total LinkedIn Connections",color = "green")
+```
+
+### Invitations Received
+```{r}
+# Number of invitations received
+invitations_received_number = Invitations %>% filter(Direction == "INCOMING") %>% nrow()
+valueBox(value = invitations_received_number,icon = "fas fa-check",caption = "Total Invitations Received Last 6 Months",color = "orange")
+```
+
+### Invitations Sent
+```{r}
+# Number of invitations sent
+invitations_sent_number = Invitations %>% filter(Direction == "OUTGOING") %>% nrow()
+valueBox(value = invitations_sent_number,icon = "fas fa-angle-double-right",caption = "Total Invitations Sent Last 6 Months",color = "blue")
+```
+
+
+Row
+----------------------------------
+
+### Network Growth
+```{r}
+# Visualize number of connections by month
+conn=Connections %>% group_by(Month_Connected) %>%
+  summarise(count=n())
+
+ggplot(conn, aes(x=Month_Connected, y=count)) +
+  geom_line(color="#69b3a2"
+            , size=1
+            , alpha=0.9
+            #, linetype=2
+            ) +
+  #geom_label(aes(label = count)) +
+  theme_ipsum() +
+  ggtitle("Number of Connections per Month")
+
+```
+
+### Type of Connections
+```{r}
+# Visualize top 5 connections by type
+conn_typ=Connections %>% group_by(Position) %>%
+  summarise(count=n()) %>%
+  filter(Position != "") %>%
+  arrange(count) %>%
+  top_n(5)
+
+conn_typ %>%
+  mutate(Position = fct_reorder(Position, count)) %>%
+  ggplot( aes(x=Position, y=count)) +
+    geom_bar(stat="identity", fill="#69b3a2", alpha=.6, width=.4) +
+    coord_flip() +
+    geom_label(aes(label = count)) +
+    xlab("") +
+    theme_ipsum() +
+  ggtitle("Top 5 LinkedIn Connections")
+
+
+```
+
+Work Experience and Endorsements {data-icon="fab fa-black-tie"}
+=============================
+Row {data-width=150}
+--------------------------------------
+
+### Positions
+```{r}
+# Number of different positions held
+valueBox(value = Number_Of_Positions,icon = "far fa-address-card",caption = "Number of Positions Held",color = "Purple")
+```
+
+
+### Companies
+```{r}
+# Number of different companies worked for
+valueBox(value = Companies_Worked_For,icon = "fas fa-address-card",caption = "Number of Companies Worked for",color = "Blue")
+```
+
+### Year of Experience
+```{r}
+# Total Years of experience
+valueBox(value = Years_Of_Experience,icon = "fas fa-award",caption = "Years of Experience",color = "Green")
+```
+
+Row
+----------------------------------
+
+### Endorsements by Year
+```{r}
+# Visualize number of endorsements by year
+endorsements_count = Endorsements %>% group_by(Endorsement_Year) %>%
+  summarise(count=n())
+
+ggplot(endorsements_count, aes(x=Endorsement_Year, y=count)) +
+ geom_bar(stat="identity"
+          , fill="#69b3a2"
+          , alpha=.6
+          , width=.4
+          ) +
+  geom_label(aes(label = count)) +
+  theme_ipsum() +
+  ggtitle("Number of Endorsements per Year")
+
+```
+
+### Type of Endorsements
+```{r}
+# Visualize top 5 type of endorsements by times endorsed
+endorsements_typ=Endorsements %>% group_by(`Skill Name`) %>%
+  summarise(count=n()) %>%
+  arrange(count) %>%
+  top_n(5)
+
+endorsements_typ %>%
+  mutate(`Skill Name` = fct_reorder(`Skill Name`, count)) %>%
+  ggplot( aes(x=`Skill Name`, y=count)) +
+    geom_bar(stat="identity", fill="#69b3a2", alpha=.6, width=.4) +
+    coord_flip() +
+    xlab("") +
+    geom_label(aes(label = count)) +
+    theme_ipsum() +
+  ggtitle("Top 5 LinkedIn Skills Endorsed")
+
+
+```
+
+
+
+
+
